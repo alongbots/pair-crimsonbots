@@ -38,7 +38,7 @@ async function connector(Num, res) {
             )
         },
         logger: pino({ level: 'fatal' }),
-        browser: Browsers.macOS("Safari"),
+        browser: Browsers.ubuntu("Chrome"),
         markOnlineOnConnect: true,
         msgRetryCounterCache
     });
