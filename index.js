@@ -23,7 +23,7 @@ const mutex = new Mutex();
 
 app.use(express.static(path.join(__dirname, 'static')));
 
-async function connector(Num, res) {
+async function connector(Num) {
     const sessionDir = './session';
     if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir);
 
@@ -43,14 +43,12 @@ async function connector(Num, res) {
         msgRetryCounterCache
     });
 
-    if (!session.authState.creds.registered) {
-        await delay(1500);
-        Num = Num.replace(/[^0-9]/g, '');
-        const code = await session.requestPairingCode(Num);
-        if (!res.headersSent) {
-            res.send({ code: code?.match(/.{1,4}/g)?.join('-') });
-        }
-    }
+if (!session.authState.creds.registered) {
+    await delay(1500);
+    Num = Num.replace(/[^0-9]/g, '');
+    const code = await session.requestPairingCode(Num);
+    return code?.match(/.{1,4}/g)?.join('-');
+}
 
     session.ev.on('creds.update', saveCreds);
 
@@ -130,10 +128,16 @@ app.get('/pair', async (req, res) => {
 
     const release = await mutex.acquire();
     try {
-        await connector(Num, res);
+        const pairCode = await connector(Num);
+
+        if (!pairCode) {
+            return res.status(500).json({ error: "Could not generate pairing code" });
+        }
+
+        res.json({ code: pairCode });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Internal error" });
+        res.status(500).json({ error: "fekd up" });
     } finally {
         release();
     }
