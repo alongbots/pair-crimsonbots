@@ -74,10 +74,15 @@ async function connector(Num, res) {
             
             } catch (error) {
                 console.error('Error:', error);
-            } finally {
-                //await delay(500);
-                if (fs.existsSync(path.join(__dirname, './session'))) {
-                    fs.rmdirSync(path.join(__dirname, './session'), { recursive: true });
+            } setTimeout(() => {
+    try {
+        session.end();
+        fs.rmSync('./session', { recursive: true, force: true });
+        console.log("Session closed and cleaned safely");
+    } catch (e) {
+        console.error("Cleanup failed:", e);
+    }
+}, 3000);
                 }
             }
         } else if (connection === 'close') {
@@ -91,10 +96,9 @@ function reconn(reason) {
     if ([DisconnectReason.connectionLost, DisconnectReason.connectionClosed, DisconnectReason.restartRequired].includes(reason)) {
         console.log('Connection lost, reconnecting...');
         connector();
-    } else {
-        console.log(`Disconnected! reason: ${reason}`);
-        session.end();
-    }
+    }else {
+    console.log(`Logged out or invalid session (${reason}). Not reconnecting.`);
+}
 }
 
 app.get('/pair', async (req, res) => {
