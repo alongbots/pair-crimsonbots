@@ -1,140 +1,49 @@
-const express = require('express');
-const fs = require('fs');
-const pino = require('pino');
-const NodeCache = require('node-cache');
+const express = require("express");
+const fs = require("fs");
+const pino = require("pino");
 const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    delay,
-    Browsers,
-    makeCacheableSignalKeyStore,
-    DisconnectReason
-} = require('baileys');
-const { upload } = require('./mega');
-const { Mutex } = require('async-mutex');
-const config = require('./config');
-const path = require('path');
+  default: makeWASocket,
+  useMultiFileAuthState,
+  delay,
+  Browsers,
+} = require("baileys");
 
 const app = express();
-const port = 3000;
-let session;
-const msgRetryCounterCache = new NodeCache();
-const mutex = new Mutex();
+const PORT = 3000;
 
-app.use(express.static(path.join(__dirname, 'static')));
+app.get("/pair", async (req, res) => {
+  try {
+    let num = req.query.code;
+    if (!num) return res.status(400).json({ error: "Phone required" });
 
-async function connector(Num) {
-    const sessionDir = './session';
-    if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir);
+    num = num.replace(/[^0-9]/g, "");
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    if (!fs.existsSync("./session")) fs.mkdirSync("./session");
 
-    session = makeWASocket({
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(
-                state.keys,
-                pino({ level: 'fatal' })
-            )
-        },
-        logger: pino({ level: 'fatal' }),
-        browser: Browsers.ubuntu("Chrome"),
-        markOnlineOnConnect: true,
-        msgRetryCounterCache
+    const { state, saveCreds } = await useMultiFileAuthState("./session");
+
+    const sock = makeWASocket({
+      auth: state,
+      logger: pino({ level: "silent" }),
+      browser: Browsers.ubuntu("Chrome"),
     });
 
-if (!session.authState.creds.registered) {
+    sock.ev.on("creds.update", saveCreds);
+
     await delay(1500);
-    Num = Num.replace(/[^0-9]/g, '');
-    const code = await session.requestPairingCode(Num);
-    return code?.match(/.{1,4}/g)?.join('-');
-}
 
-    session.ev.on('creds.update', saveCreds);
+    const code = await sock.requestPairingCode(num);
 
-session.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
+    res.json({
+      code: code.match(/.{1,4}/g).join("-"),
+    });
 
-    if (connection === 'open') {
-        console.log('Device linked successfully');
-
-        const myr = await session.sendMessage(session.user.id, {
-            text: config.MESSAGE
-        });
-
-        try {
-            const url = await upload('./session/creds.json');
-
-            let sID = "UPLOAD_FAILED";
-            if (url.includes("https://mega.nz/file/")) {
-                sID = config.PREFIX + url.split("https://mega.nz/file/")[1];
-            }
-
-            await session.sendMessage(
-                session.user.id,
-                {
-                    image: { url: config.IMAGE },
-                    caption: `*Session ID*\n\n${sID}`
-                },
-                { quoted: myr }
-            );
-        } catch (e) {
-            console.error("Upload error:", e);
-        }
-    }
-
-    if (connection === 'close') {
-        const reason = lastDisconnect?.error?.output?.statusCode;
-
-        // NOW pairing is finished, WhatsApp closed the temp device
-        if (reason === 401 || reason === DisconnectReason.loggedOut) {
-            console.log("Pairing finished, cleaning session");
-
-            try {
-                fs.rmSync('./session', { recursive: true, force: true });
-            } catch {}
-        }
-
-        reconn(reason);
-    }
-});
-}
-function reconn(reason) {
-    if (
-        [DisconnectReason.connectionLost,
-         DisconnectReason.connectionClosed,
-         DisconnectReason.restartRequired].includes(reason)
-    ) {
-        console.log("Connection lost, reconnecting...");
-        connector();
-    } else if (reason === 401 || reason === DisconnectReason.loggedOut) {
-        console.log("Pairing device logged out (normal). Waiting for next request.");
-    } else {
-        console.log("Disconnected:", reason);
-    }
-}
-
-app.get('/pair', async (req, res) => {
-    const Num = req.query.code;
-    if (!Num) return res.status(418).json({ message: 'Phone number is required' });
-
-    const release = await mutex.acquire();
-    try {
-        const pairCode = await connector(Num);
-
-        if (!pairCode) {
-            return res.status(500).json({ error: "Could not generate pairing code" });
-        }
-
-        res.json({ code: pairCode });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "fekd up" });
-    } finally {
-        release();
-    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Pairing failed" });
+  }
 });
 
-app.listen(port, () => {
-    console.log(`Running on PORT:${port}`);
+app.listen(PORT, () => {
+  console.log("Running on port", PORT);
 });
