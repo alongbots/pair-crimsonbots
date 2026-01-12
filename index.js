@@ -98,7 +98,7 @@ session.ev.on('connection.update', async (update) => {
         reconn(reason);
     }
 });
-
+}
 function reconn(reason) {
     if (
         [DisconnectReason.connectionLost,
