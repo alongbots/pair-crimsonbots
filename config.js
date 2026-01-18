@@ -1,6 +1,6 @@
 // USE ENVIRONMENT VARIABLES FOR EMAIL AND PASSWORD INSTEAD.
 module.exports = {
-  PREFIX: process.env.PREFIX || "IRON-M4N×",
+  PREFIX: process.env.PREFIX || "ALONG×",
   EMAIL: process.env.EMAIL || "subscribe.evato.elements@gmail.com",
   PASS: process.env.PASS || "Nimsss321#",
   MESSAGE: process.env.MESSAGE || "Thank you for using our bot dont share your session id blah blah .etc",
